@@ -263,6 +263,9 @@ final class Notifier
                 foreach ($eventIds as $id) {
                     $this->repository->updateEvent($id, self::HELD);
                 }
+                // A held reminder counts as due again only after another
+                // reminder period, not at every check while the cap holds.
+                $this->markSent($still, $now);
                 do_action('feed_health_notify', $all, $results);
 
                 return ['entries' => count($all), 'channels' => $results];

@@ -334,6 +334,27 @@ final class NotifyTest extends TestCase
         self::assertStringContainsString('1 notification was held back by the daily email cap', \WpStub::$mail[10]['body']);
     }
 
+    /**
+     * While the cap holds, a reminder is held once per reminder period, not
+     * once per check, so the held-back count stays honest.
+     */
+    public function testHeldReminderIsNotRecountedAtEveryCheck(): void
+    {
+        $this->settings(['daily_email_cap' => 1, 'reminder_hours' => 2]);
+        $this->steady(['a', 'b']);
+        $this->breakFeed('a');
+        $this->check();
+        self::assertCount(1, \WpStub::$mail);
+        for ($h = 0; $h < 6; $h++) {
+            $this->clock->advance(3600);
+            $this->fetch('a', 'http_error', ['http_status' => 403]);
+            $this->fetchWithItems('b', 1);
+            $this->check();
+        }
+        self::assertCount(1, \WpStub::$mail);
+        self::assertSame(3, (int) $this->plugin->state->get('held_back', 0), 'held at 2 h, 4 h and 6 h');
+    }
+
     /** Test 64 (case 73). */
     public function testEmailBodyIsPlainTextWithEveryField(): void
     {

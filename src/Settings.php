@@ -175,8 +175,9 @@ final class Settings
             $number = max($min, min($max, $number));
             $out[$key] = is_float($default) ? (float) $number : (int) $number;
         }
-        if ($out['quiet_ceiling_hours'] < $out['quiet_floor_hours']) {
-            $out['quiet_ceiling_hours'] = $out['quiet_floor_hours'];
+        $floor = $out['quiet_floor_hours'] ?? self::NUMBERS['quiet_floor_hours'][0];
+        if (($out['quiet_ceiling_hours'] ?? self::NUMBERS['quiet_ceiling_hours'][0]) < $floor) {
+            $out['quiet_ceiling_hours'] = $floor;
         }
         $interval = $input['check_interval'] ?? 'hourly';
         $out['check_interval'] = is_string($interval) && in_array($interval, self::INTERVALS, true) ? $interval : 'hourly';

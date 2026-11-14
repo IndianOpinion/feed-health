@@ -1,5 +1,5 @@
 parameters:
-    level: 6
+    level: 8
     treatPhpDocTypesAsCertain: false
     paths:
         - src
@@ -16,4 +16,10 @@ parameters:
     ignoreErrors:
         -
             identifier: requireOnce.fileNotFound
+            path: src/Storage/WpdbDb.php
+        # Table and column names come from the plugin's own constants and are
+        # checked by assertName(); every value goes through a placeholder.
+        -
+            identifier: argument.type
+            message: '#expects literal-string, string given#'
             path: src/Storage/WpdbDb.php

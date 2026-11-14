@@ -18,7 +18,7 @@ PHP 8.1 or later. No WordPress install is needed for the tests:
 
 ```sh
 composer test      # PHPUnit
-composer analyse   # PHPStan, level 6
+composer analyse   # PHPStan, level 8
 composer lint      # phpcs, PSR-12
 composer check     # all three
 ```

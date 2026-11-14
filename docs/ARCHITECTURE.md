@@ -98,14 +98,14 @@ Each ruling came with the build task. The reason is ours.
    with tabs, forms posting to `admin-post.php`, inline CSS, inline SVG
    sparklines, no scripts, no external assets. *Reason:* fewer surfaces to
    secure, and it works without JavaScript.
-6. **Multisite: one email per site per day, with a network-level daily cap
-   option.** Read as: the daily email cap is counted per site per day
-   (each site has its own tally, default cap 10), and a network-wide cap
-   (site option, default 0 meaning off, set by a network administrator on
-   the Settings tab) bounds the total across all sites. Mail held by
-   either cap is logged and reported in that site's next email. *If the
-   ruling meant a hard limit of one email per site per day, set the
-   per-site cap to 1; nothing else changes.*
+6. **Multisite: a per-site daily email cap plus an off-by-default network
+   cap.** This is the accepted reading of the ruling. Each site counts its
+   own emails per day in its own time zone, against its own cap (setting
+   `daily_email_cap`, default 10). A network-wide daily cap (site option,
+   default 0 meaning off, set by a network administrator on the Settings
+   tab) can also bound the total across all sites. Mail held by either cap
+   is logged with "email cap reached" and counted in that site's next
+   email. A site that wants at most one email a day sets its cap to 1.
 7. **End-of-import check: yes, on the adapter's end-of-run action, with a
    daily cron fallback.** `endRun()` (and the `feed_health_run_end`
    action) fires `feed_health_run_ended`; the plugin then schedules one
@@ -179,7 +179,7 @@ Each ruling came with the build task. The reason is ours.
   `credential` or `session`. Over-redaction is the safe direction.
 - **CSV cells** that start with `=`, `+`, `-` or `@` get a leading quote,
   so a hostile feed label cannot become a spreadsheet formula.
-- **PHPStan level 6** with `treatPhpDocTypesAsCertain: false`: adapters
+- **PHPStan level 8** with `treatPhpDocTypesAsCertain: false`: adapters
   are third-party code, so runtime type checks on what they return are
   deliberate.
 

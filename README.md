@@ -58,7 +58,10 @@ run for must-use plugins, so the tables are created on the first wp-admin
 page load or the first scheduled check.
 
 **Multisite.** Network activation creates the tables on every site. A
-site added later gets its tables on its first admin load.
+site added later gets its tables on its first admin load. Each site has
+its own daily email cap (default 10, counted per site per day). A network
+administrator can also set a network-wide daily cap on the Settings tab;
+it is off (0) by default.
 
 ## Quick start
 

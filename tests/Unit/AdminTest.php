@@ -261,6 +261,9 @@ final class AdminTest extends TestCase
         self::assertSame(0, $clean['daily_email_cap']);
         self::assertSame(20.0, $clean['quiet_multiplier']);
         self::assertSame(['a@example.com'], $clean['recipients']);
+        add_filter('feed_health_capability', static fn (): string => 'edit_others_posts');
+        $this->page->register();
+        self::assertSame('edit_others_posts', apply_filters('option_page_capability_feed_health', 'manage_options'), 'settings save under the same capability as the page');
         self::assertArrayNotHasKey('bogus', $clean);
         self::assertSame('hourly', $clean['check_interval']);
         self::assertFalse($clean['enabled']);

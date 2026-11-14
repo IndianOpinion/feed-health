@@ -42,6 +42,10 @@ final class AdminPage
     {
         add_action('admin_menu', [$this, 'menu'], 10, 0);
         add_action('admin_init', [$this, 'registerSettings'], 10, 0);
+        // options.php checks manage_options unless told otherwise: without
+        // this, a site that filters the capability shows a settings form
+        // its users cannot save.
+        add_filter('option_page_capability_feed_health', [$this->plugin, 'capability'], 10, 0);
         add_action('admin_post_' . self::ACTION, [$this, 'handle'], 10, 0);
         add_action('admin_post_' . self::EXPORT, [$this, 'export'], 10, 0);
     }

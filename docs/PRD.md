@@ -25,9 +25,9 @@ Three things make this worse in practice:
 - Output is bursty. A quiet hour is normal for most feeds, so a person who
   looks only now and then cannot tell a slow feed from a dead one.
 
-Measured result in production: at one point 43 of the 50 oldest
-unprocessed imported items were duplicates that had been dropped without a
-record, so they were picked up again on every pass and nothing reported the
+In production, most of the oldest unprocessed imported items turned out to
+be duplicates dropped without any record, which is the gap this plugin
+closes. They were picked up again on every pass and nothing reported the
 duplicate rate at all.
 
 feed-health records, for every feed, each fetch attempt and what it yielded.
@@ -706,6 +706,9 @@ filterable at read time.
   grepped.
 - The README has a "Is it working?" section: run `wp feed-health status`,
   run a test fetch, send a test alert, look at the event log.
+- The README states: "Written from scratch; not derived from any third-party
+  plugin."
+
 
 ## 12. Acceptance tests
 

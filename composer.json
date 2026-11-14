@@ -1,0 +1,61 @@
+{
+    "name": "indianopinion/feed-health",
+    "description": "WordPress plugin that tracks per-feed yield, fetch failures, HTTP status, last-item age and duplicate rate, shows a dashboard, and alerts when a feed goes quiet or starts failing.",
+    "type": "wordpress-plugin",
+    "license": "MIT",
+    "keywords": [
+        "wordpress",
+        "feeds",
+        "rss",
+        "monitoring",
+        "health",
+        "importer"
+    ],
+    "homepage": "https://github.com/IndianOpinion/feed-health",
+    "authors": [
+        {
+            "name": "Indian Opinion",
+            "email": "hello@indianopinion.org"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/IndianOpinion/feed-health/issues",
+        "source": "https://github.com/IndianOpinion/feed-health"
+    },
+    "require": {
+        "php": ">=8.1"
+    },
+    "require-dev": {
+        "php-stubs/wordpress-stubs": "^6.9",
+        "php-stubs/wp-cli-stubs": "^2.12",
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^10.5",
+        "squizlabs/php_codesniffer": "^3.10"
+    },
+    "autoload": {
+        "psr-4": {
+            "IndianOpinion\\FeedHealth\\": "src/"
+        },
+        "files": [
+            "src/functions.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "IndianOpinion\\FeedHealth\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "analyse": "phpstan analyse --no-progress --memory-limit=1G",
+        "lint": "phpcs",
+        "check": [
+            "@lint",
+            "@analyse",
+            "@test"
+        ]
+    },
+    "config": {
+        "sort-packages": true
+    }
+}

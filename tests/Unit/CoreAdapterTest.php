@@ -149,6 +149,50 @@ final class CoreAdapterTest extends TestCase
         self::assertNull($this->feed($this->plugin->core->feedKey(self::URL), 'core')['last_attempt']);
     }
 
+    /**
+     * `http_api_debug` may carry a WP_Error instead of a response array. The
+     * wrapper and passive mode both record it as a transport error, and
+     * neither fails or changes what fetch_feed() returned.
+     */
+    public function testHttpDebugWithWpErrorResponseIsRecordedWithoutError(): void
+    {
+        $timeout = new \WP_Error('http_request_failed', 'cURL error 28: Operation timed out');
+        $result = new \WP_Error('simplepie-error', 'WP HTTP Error: cURL error 28');
+        $this->script($timeout, $result);
+        self::assertSame($result, feed_health_fetch_feed(self::URL));
+
+        // Stale cache served after a transport failure: a feed object comes
+        // back, but the request behind it failed.
+        $stale = self::feedWith(2);
+        $this->script($timeout, $stale);
+        self::assertSame($stale, feed_health_fetch_feed(self::URL));
+        $this->plugin->recorder->flush();
+
+        $fetches = $this->rows(Schema::FETCHES);
+        self::assertCount(2, $fetches);
+        foreach ($fetches as $row) {
+            self::assertSame(Outcome::TRANSPORT_ERROR, $row['outcome']);
+            self::assertNull($row['http_status']);
+            self::assertSame('http_request_failed', $row['error_code']);
+        }
+        self::assertSame(0, $this->counter('internal_error'));
+
+        \WpStub::reset();
+        add_filter('feed_health_adapters', static fn (array $l): array => $l);
+        $this->plugin = $this->newPlugin();
+        $this->plugin->install();
+        $this->settings(['core_passive' => true]);
+        $this->boot();
+        $this->script($timeout, $result);
+        self::assertSame($result, fetch_feed(self::URL));
+        do_action('shutdown');
+        $fetches = $this->rows(Schema::FETCHES);
+        self::assertCount(3, $fetches, 'one more fetch, from passive mode');
+        self::assertSame(Outcome::TRANSPORT_ERROR, $fetches[2]['outcome']);
+        self::assertSame('http_request_failed', $fetches[2]['error_code']);
+        self::assertSame(0, $this->counter('internal_error'));
+    }
+
     /** Test 30 (case 33). */
     public function testThreeWpErrorShapesMapToThreeOutcomes(): void
     {

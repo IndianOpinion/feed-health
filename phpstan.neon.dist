@@ -1,0 +1,25 @@
+parameters:
+    level: 8
+    treatPhpDocTypesAsCertain: false
+    paths:
+        - src
+        - feed-health.php
+        - uninstall.php
+        - autoload.php
+    scanFiles:
+        - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
+        - vendor/php-stubs/wp-cli-stubs/wp-cli-stubs.php
+    bootstrapFiles:
+        - tests/phpstan-bootstrap.php
+    dynamicConstantNames:
+        - FEED_HEALTH_DISABLED
+    ignoreErrors:
+        -
+            identifier: requireOnce.fileNotFound
+            path: src/Storage/WpdbDb.php
+        # Table and column names come from the plugin's own constants and are
+        # checked by assertName(); every value goes through a placeholder.
+        -
+            identifier: argument.type
+            message: '#expects literal-string, string given#'
+            path: src/Storage/WpdbDb.php

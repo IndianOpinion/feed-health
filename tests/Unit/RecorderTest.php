@@ -405,6 +405,31 @@ final class RecorderTest extends TestCase
         self::assertSame(Recorder::FLUSH_CAP + 10, $rows[0]['items']);
     }
 
+    /**
+     * A fetch larger than the flush cap: the reported item count is not
+     * counted twice, and the newest item and title come from the whole
+     * fetch, not from the last chunk written.
+     */
+    public function testFetchAcrossCapFlushesKeepsTotalsAndNewest(): void
+    {
+        $total = Recorder::FLUSH_CAP + 20;
+        $now = $this->clock->now();
+        $this->fetch('a', 'ok', ['items' => $total], false);
+        for ($i = 0; $i < $total; $i++) {
+            // Newest first, as feeds list them.
+            $this->item('a', 'https://news.example.com/big/' . $i, ['published_at' => $now - $i * 60, 'title' => 'Story ' . $i]);
+        }
+        $this->plugin->recorder->flush();
+        $rows = $this->rows(Schema::FETCHES);
+        self::assertCount(1, $rows);
+        self::assertSame($total, $rows[0]['items']);
+        self::assertSame($total, $rows[0]['accepted']);
+        $feed = $this->feed('a');
+        self::assertSame($now, $feed['newest_published_at']);
+        self::assertSame('Story 0', $feed['last_new_title']);
+        self::assertSame(1, $feed['attempts_total']);
+    }
+
     public function testRunEndFlushesAndQueuesOneCheck(): void
     {
         $this->boot();

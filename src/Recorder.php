@@ -38,6 +38,9 @@ final class Recorder
      *     keys: array<string, true>,
      *     rejected: int,
      *     observed: int,
+     *     written: int,
+     *     newest: int|null,
+     *     best: array{title: string, published: int|null}|null,
      *     label: string,
      *     url: string
      * }>
@@ -140,6 +143,9 @@ final class Recorder
                 'keys' => [],
                 'rejected' => 0,
                 'observed' => 0,
+                'written' => 0,
+                'newest' => null,
+                'best' => null,
                 'label' => (string) $result->feedLabel,
                 'url' => (string) $result->feedUrl,
             ];
@@ -175,6 +181,9 @@ final class Recorder
                     'keys' => [],
                     'rejected' => 0,
                     'observed' => 0,
+                    'written' => 0,
+                    'newest' => null,
+                    'best' => null,
                     'label' => $item->source,
                     'url' => '',
                 ];
@@ -182,6 +191,7 @@ final class Recorder
                 $this->grow();
             }
             $index = $this->open[$slot];
+            $entry = $this->buffer[$index];
             $this->state->increment('items_recorded');
 
             $raw = apply_filters('feed_health_item_url', $item->url, [
@@ -195,32 +205,34 @@ final class Recorder
             $scheme = strtolower((string) parse_url($raw, PHP_URL_SCHEME));
             if ($raw === '' || ($scheme !== 'http' && $scheme !== 'https')) {
                 $noUrlKey = 'no_url:' . $raw;
-                if (!isset($this->buffer[$index]['keys'][$noUrlKey])) {
-                    $this->buffer[$index]['keys'][$noUrlKey] = true;
-                    $this->buffer[$index]['rejected']++;
-                    $this->buffer[$index]['observed']++;
+                if (!isset($entry['keys'][$noUrlKey])) {
+                    $entry['keys'][$noUrlKey] = true;
+                    $entry['rejected']++;
+                    $entry['observed']++;
+                    $this->buffer[$index] = $entry;
                 }
 
                 return;
             }
             $key = $this->keyFor($raw);
-            if (isset($this->buffer[$index]['keys'][$key])) {
+            if (isset($entry['keys'][$key])) {
                 return;
             }
-            $this->buffer[$index]['keys'][$key] = true;
-            $this->buffer[$index]['observed']++;
+            $entry['keys'][$key] = true;
+            $entry['observed']++;
 
             $published = $item->publishedAt;
             if ($published !== null && $published > $this->clock->now() + self::FUTURE_SLACK) {
                 $published = null;
                 $this->state->increment('bad_date');
             }
-            $this->buffer[$index]['items'][] = [
+            $entry['items'][] = [
                 'key' => $key,
                 'outcome' => $item->outcome,
                 'title' => mb_substr($item->title, 0, self::TITLE_MAX),
                 'published' => $published,
             ];
+            $this->buffer[$index] = $entry;
             $this->grow();
         } catch (\Throwable $e) {
             $this->internal($e);
@@ -386,6 +398,20 @@ final class Recorder
     private function writeEntry(int $index): void
     {
         $entry = $this->buffer[$index];
+        try {
+            $this->writeFetch($entry);
+        } finally {
+            // Kept even when a step fails part way, so the next flush never
+            // inserts a second row for a fetch already written.
+            $this->buffer[$index] = $entry;
+        }
+    }
+
+    /**
+     * @param array{adapter: string, feed_key: string, result: FetchResult|null, started: int, db_id: int|null, feed_id: int|null, items: list<array{key: string, outcome: string, title: string, published: int|null}>, keys: array<string, true>, rejected: int, observed: int, written: int, newest: int|null, best: array{title: string, published: int|null}|null, label: string, url: string} $entry
+     */
+    private function writeFetch(array &$entry): void
+    {
         $now = $this->clock->now();
         $result = $entry['result'];
 
@@ -411,6 +437,9 @@ final class Recorder
         $feed = $this->repository->feed($feedId) ?? ['id' => $feedId];
 
         $firstWrite = $entry['db_id'] === null;
+        // The fetch row's item count is the larger of what the adapter
+        // reported and what was observed, over every chunk of this fetch.
+        $itemTotal = max($result !== null ? $result->items : 0, $entry['observed']);
         if ($firstWrite) {
             $outcome = $result !== null ? $result->outcome : Outcome::OK;
             $runId = $result?->runId;
@@ -428,7 +457,7 @@ final class Recorder
                 'final_url' => $result?->finalUrl,
                 'error_code' => $result?->errorCode,
                 'error_message' => $result?->errorMessage,
-                'items' => max($result !== null ? $result->items : 0, $entry['observed']),
+                'items' => $itemTotal,
                 'bytes' => $result?->bytes,
                 'manual' => $result !== null && $result->manual ? 1 : 0,
                 'fresh' => 0,
@@ -437,18 +466,21 @@ final class Recorder
                 'duplicates' => 0,
                 'rejected' => 0,
             ]);
+            $entry['written'] = $itemTotal;
         }
+        $dbId = (int) $entry['db_id'];
 
         $counts = $this->resolveItems($feedId, $entry['items'], $now);
         $counts['rejected'] += $entry['rejected'];
         if (!$firstWrite) {
-            $counts['items'] = count($entry['items']) + $entry['rejected'];
+            $counts['items'] = max(0, $itemTotal - $entry['written']);
+            $entry['written'] = max($entry['written'], $itemTotal);
         }
         $entry['rejected'] = 0;
-        $this->repository->incrementFetch($entry['db_id'], $counts);
+        $this->repository->incrementFetch($dbId, $counts);
 
-        $this->updateFeedAfter($feed, $result, $entry, $counts, $firstWrite, $now);
-        $this->buffer[$index] = $entry;
+        [$entry['newest'], $entry['best']] = $this->updateFeedAfter($feed, $result, $entry, $counts, $firstWrite, $now);
+        $entry['items'] = [];
     }
 
     /**
@@ -499,10 +531,11 @@ final class Recorder
 
     /**
      * @param array<string, int|string|null> $feed
-     * @param array{items: list<array{key: string, outcome: string, title: string, published: int|null}>, observed: int, started: int} $entry
+     * @param array{items: list<array{key: string, outcome: string, title: string, published: int|null}>, observed: int, started: int, newest: int|null, best: array{title: string, published: int|null}|null} $entry
      * @param array<string, int> $counts
+     * @return array{0: int|null, 1: array{title: string, published: int|null}|null} The newest date and the newest accepted item so far in this fetch.
      */
-    private function updateFeedAfter(array $feed, ?FetchResult $result, array $entry, array $counts, bool $firstWrite, int $now): void
+    private function updateFeedAfter(array $feed, ?FetchResult $result, array $entry, array $counts, bool $firstWrite, int $now): array
     {
         $feedId = (int) $feed['id'];
         $set = [];
@@ -543,22 +576,29 @@ final class Recorder
             unset($notes['not_reached']);
         }
 
+        // A fetch larger than the flush cap is written in chunks: the newest
+        // date and title are carried across chunks, so a later chunk of
+        // older items never replaces what an earlier chunk set.
         if (Outcome::isSuccess($outcome) && $entry['items'] !== []) {
-            $newest = null;
+            $newest = $entry['newest'];
             foreach ($entry['items'] as $item) {
                 if ($item['published'] !== null && ($newest === null || $item['published'] > $newest)) {
                     $newest = $item['published'];
                 }
             }
-            $set['newest_published_at'] = $newest;
+            if ($firstWrite || $newest !== $entry['newest']) {
+                $set['newest_published_at'] = $newest;
+            }
+            $entry['newest'] = $newest;
         }
 
         if ($counts['accepted'] > 0) {
             $set['last_new_at'] = $now;
-            $title = $this->newestAcceptedTitle($entry['items']);
-            if ($title !== null) {
-                $set['last_new_title'] = $title;
+            $best = $this->newestAccepted($entry['items'], $entry['best']);
+            if ($best !== null && $best !== $entry['best']) {
+                $set['last_new_title'] = mb_substr($best['title'], 0, self::TITLE_MAX);
             }
+            $entry['best'] = $best;
         }
 
         $encoded = $notes === [] ? null : (string) wp_json_encode($notes);
@@ -568,27 +608,31 @@ final class Recorder
         if ($set !== []) {
             $this->repository->updateFeed($feedId, $set);
         }
+
+        return [$entry['newest'], $entry['best']];
     }
 
     /**
-     * The title of the newest accepted item: by published time when the
-     * items carry dates, otherwise the first accepted item in feed order.
+     * The newest accepted item: by published time when the items carry
+     * dates, otherwise the first accepted item in feed order. Starts from
+     * the best item of earlier chunks of the same fetch.
      *
      * @param list<array{key: string, outcome: string, title: string, published: int|null}> $items
+     * @param array{title: string, published: int|null}|null $best
+     * @return array{title: string, published: int|null}|null
      */
-    private function newestAcceptedTitle(array $items): ?string
+    private function newestAccepted(array $items, ?array $best): ?array
     {
-        $best = null;
         foreach ($items as $item) {
             if ($item['outcome'] !== ItemObservation::ACCEPTED && $item['outcome'] !== ItemObservation::UNKNOWN) {
                 continue;
             }
             if ($best === null || ($item['published'] !== null && ($best['published'] === null || $item['published'] > $best['published']))) {
-                $best = $item;
+                $best = ['title' => $item['title'], 'published' => $item['published']];
             }
         }
 
-        return $best === null ? null : mb_substr($best['title'], 0, self::TITLE_MAX);
+        return $best;
     }
 
     private function keyFor(string $url): string

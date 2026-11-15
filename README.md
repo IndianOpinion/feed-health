@@ -328,3 +328,5 @@ removed, on every site of a network. Deactivation keeps the data.
 ## Licence
 
 MIT. Copyright (c) 2026 Indian Opinion. See [LICENSE](LICENSE).
+
+Contributions are welcome, see [CONTRIBUTING.md](CONTRIBUTING.md).
